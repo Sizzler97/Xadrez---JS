@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="pt-pt">
+<head>
+    <link rel="stylesheet" type="text/css" href="main.css">
+    <meta charset="UTF-8" />
+</head>
+<body>
+    <table id="table">
+    </table>
+
+    <script src="gameObjects.js"></script>
+    <script>
+        var currentTurn = "white";
+
+        var hasGameEnded = false;
+
+
+        const backRow = [
+            Rook,
+            Knight,
+            Bishop,
+            Queen,
+            King,
+            Bishop,
+            Knight,
+            Rook
+        ];
+
+        let checkResolvingMoves = null;
+
+        var currentTile = null;
+
+        const board = [];
+
+        const table = document.querySelector("table");
+
+        for (let y = 0; y < 8; y++)
+        {
+            const row = document.createElement("tr");
+            board[y] = [];
+
+            for (let x = 0; x < 8; x++)
+            {
+                const cell = document.createElement("td");
+
+                const tile = {
+                    x,
+                    y,
+                    occupied: false,
+                    piece: null,
+                    isHighlighted: false,
+                    element: cell
+                };
+
+                board[y][x] = tile;
+
+                cell.addEventListener("click", () => {
+                    handleTileClick(tile);
+                });
+
+                row.appendChild(cell);
+            }
+
+            table.appendChild(row);
+        }
+
+        function ChangeTurn()
+        {
+
+            if (currentTurn == "white")
+            {
+                currentTurn = "black";
+            }
+            else if (currentTurn == "black")
+            {
+                currentTurn = "white";
+            }
+
+        }
+
+
+        function EndGame()
+        {
+            hasGameEnded = true;
+
+            console.log(currentTurn + " won the game");
+        } 
+
+        function isKingInCheck(board, color)
+        {
+            let kingTile = null;
+            for (let y = 0; y < 8; y++) {
+                for (let x = 0; x < 8; x++) {
+                    const piece = board[y][x].piece;
+                    if (piece instanceof King && piece.color === color) {
+                        kingTile = board[y][x];
+                    }
+                }
+            }
+            if (kingTile == null) return false;
+
+            for (let y = 0; y < 8; y++) {
+                for (let x = 0; x < 8; x++) {
+                    const piece = board[y][x].piece;
+                    if (piece != null && piece.color !== color) {
+                        const moves = piece.getMoves(board, x, y);
+                        if (moves.includes(kingTile)) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            checkResolvingMoves = null;
+            return false;
+        }
+
+        function computeCheckResolvingMoves(board, color) {
+            const resolving = [];
+            for (let y = 0; y < 8; y++) {
+                for (let x = 0; x < 8; x++) {
+                    const piece = board[y][x].piece;
+                    if (piece == null || piece.color !== color) continue;
+
+                    const fromTile = board[y][x];
+                    const moves = piece.getMoves(board, x, y);
+
+                    for (const toTile of moves) {
+                        const capturedPiece = toTile.piece;
+
+                        toTile.piece = piece;
+                        fromTile.piece = null;
+
+                        const stillInCheck = isKingInCheck(board, color);
+
+                        fromTile.piece = piece; // undo
+                        toTile.piece = capturedPiece;
+
+                        if (!stillInCheck) {
+                            resolving.push({ from: fromTile, to: toTile });
+                        }
+                    }
+                }
+            }
+            return resolving;
+        }
+
+        function wouldBeInCheck(piece, fromTile, toTile) {
+            const capturedPiece = toTile.piece;
+
+            toTile.piece = piece;
+            fromTile.piece = null;
+
+            const inCheck = isKingInCheck(board, piece.color);
+
+            fromTile.piece = piece; // undo
+            toTile.piece = capturedPiece;
+
+            return inCheck;
+        }
+
+        function getLegalMoves(piece, tile) {
+            const pseudoMoves = piece.getMoves(board, tile.x, tile.y);
+            return pseudoMoves.filter(move => !wouldBeInCheck(piece, tile, move));
+        }
+
+        function hasAnyLegalMove(color) {
+            for (let y = 0; y < 8; y++) {
+                for (let x = 0; x < 8; x++) {
+                    const piece = board[y][x].piece;
+                    if (piece != null && piece.color === color) {
+                        if (getLegalMoves(piece, board[y][x]).length > 0) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+
+        function handleTileClick(tile)
+        {
+            if (!hasGameEnded)
+            {
+                console.log(tile);
+
+                if (currentTile != null && !tile.isHighlighted)
+                {
+                    CleanTilePreview();
+                }
+                else if (currentTile != null && tile.isHighlighted)
+                {
+                    CleanTilePreview();
+
+                    const isCastling = currentTile.piece instanceof King
+                        && Math.abs(tile.x - currentTile.x) === 2;
+
+                    tile.piece = currentTile.piece;
+                    tile.occupied = true;
+                    tile.piece.hasMoved = true;
+                    tile.element.textContent = tile.piece.symbol;
+                    board[currentTile.y][currentTile.x].piece = null;
+                    currentTile.element.textContent = "";
+
+                    if (isCastling)
+                    {
+                        const isKingside = tile.x > currentTile.x;
+                        const rookFromX = isKingside ? tile.x + 1 : tile.x - 2;
+                        const rookToX = isKingside ? tile.x - 1 : tile.x + 1;
+
+                        const rookFromTile = board[tile.y][rookFromX];
+                        const rookToTile = board[tile.y][rookToX];
+
+                        rookToTile.piece = rookFromTile.piece;
+                        rookToTile.piece.hasMoved = true;
+                        rookToTile.element.textContent = rookToTile.piece.symbol;
+                        rookFromTile.piece = null;
+                        rookFromTile.element.textContent = "";
+                    }
+
+                    currentTile = null;
+
+                    if (currentTurn == "white")
+                    {
+                        if (isKingInCheck(board, "black"))
+                        {
+                            if (!hasAnyLegalMove("black"))
+                            {
+                                EndGame();
+                            }
+                        }
+                        else if (!isKingInCheck(board, "black") && (!hasAnyLegalMove("black")))
+                        {
+                            hasGameEnded = true;
+
+                            console.log(" Draw ");
+                        }
+                    }
+                    else if (currentTurn == "black")
+                    {
+                        if (isKingInCheck(board, "white"))
+                        {
+                            if (!hasAnyLegalMove("white")) {
+                                EndGame();
+                            }
+                        }
+                        else if (!isKingInCheck(board, "white") && (!hasAnyLegalMove("white")))
+                        {
+                            hasGameEnded = true;
+
+                            console.log(" Draw ");
+                        }
+                    }
+
+                    
+
+                    ChangeTurn();
+
+                    return;
+                }
+
+                if (tile.piece != null && tile.piece.color == currentTurn) {
+                    currentTile = tile;
+
+                    ChangeTilePreview();
+                }
+                else if (tile.piece == null) {
+                    currentTile = null;
+                }
+            }
+        }
+
+        function CleanTilePreview()
+        {
+            const moves = currentTile.piece.getMoves(board, currentTile.x, currentTile.y);
+            if (moves != null)
+            {
+                moves.forEach(move => {
+                    move.element.style.backgroundColor = "";
+                    move.isHighlighted = false;
+                });
+            }
+        }
+
+        function ChangeTilePreview()
+        {
+            if (currentTile.piece != null)
+            {
+                const moves = getLegalMoves(currentTile.piece, currentTile);
+                moves.forEach(move => {
+                    move.isHighlighted = true;
+                    move.element.style.backgroundColor = "green";
+                });
+            }
+        }
+
+        function setupBoard()
+        {
+            for (let x = 0; x < 8; x++)
+            {
+                board[0][x].piece = new backRow[x]("black");
+                board[1][x].piece = new Pawn("black");
+
+                board[6][x].piece = new Pawn("white");
+                board[7][x].piece = new backRow[x]("white");
+            }
+        }
+
+        function renderBoard()
+        {
+            for (let y = 0; y < 8; y++)
+            {
+                for (let x = 0; x < 8; x++)
+                {
+                    const tile = board[y][x];
+
+                    if (tile.piece == null)
+                        tile.element.textContent = "";
+                    else
+                        tile.element.textContent = tile.piece.symbol;
+                }
+            }
+        }
+
+        setupBoard();
+        renderBoard();
+    </script>
+
+</body>
+</html>
