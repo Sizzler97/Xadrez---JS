@@ -8,8 +8,6 @@
         }
     }
 
-    var canEnPassant = false;
-
     class Pawn extends Piece {
 
         constructor(color)
@@ -28,6 +26,7 @@
             if (isInside(board, x - 1, y) && board[y][x - 1].piece instanceof Pawn && board[y][x - 1].piece.color !== this.color) {
                 moves.push(board[y + direction][x - 1]);
             }
+
 
             return moves;
         }
@@ -60,7 +59,7 @@
                 }
             }
 
-            if(canEnPassant)
+            if(enPassantTarget != null)
                 moves.push(...this.EnPassant(board, x, y, direction));  
 
             return moves;

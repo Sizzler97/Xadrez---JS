@@ -5,16 +5,19 @@
     <meta charset="UTF-8" />
 </head>
 <body>
-    <table id="table"> 
+    <table id="table">
     </table>
 
     <script src="gameObjects.js"></script>
+    <script src="moves.js"></script>
     <script>
         var currentTurn = "white";
 
         var hasGameEnded = false;
 
         let enPassantTarget = null;
+
+        const moveHistory = [];
 
         const backRow = [
             Rook,
@@ -31,17 +34,17 @@
 
         var currentTile = null;
 
+        let halfMoveClock = 0;
+
         const board = [];
 
         const table = document.querySelector("table");
 
-        for (let y = 0; y < 8; y++)
-        {
+        for (let y = 0; y < 8; y++) {
             const row = document.createElement("tr");
             board[y] = [];
 
-            for (let x = 0; x < 8; x++)
-            {
+            for (let x = 0; x < 8; x++) {
                 const cell = document.createElement("td");
 
                 const tile = {
@@ -65,30 +68,25 @@
             table.appendChild(row);
         }
 
-        function ChangeTurn()
-        {
+        function ChangeTurn() {
 
-            if (currentTurn == "white")
-            {
+            if (currentTurn == "white") {
                 currentTurn = "black";
             }
-            else if (currentTurn == "black")
-            {
+            else if (currentTurn == "black") {
                 currentTurn = "white";
             }
 
         }
 
 
-        function EndGame()
-        {
+        function EndGame() {
             hasGameEnded = true;
 
             console.log(currentTurn + " won the game");
-        } 
+        }
 
-        function isKingInCheck(board, color)
-        {
+        function isKingInCheck(board, color) {
             let kingTile = null;
             for (let y = 0; y < 8; y++) {
                 for (let x = 0; x < 8; x++) {
@@ -211,7 +209,9 @@
             document.body.appendChild(overlay);
         }
 
-        function finishMove() {
+        function finishMove(moves) {
+            moveHistory.push(moves);
+
             const opponent = currentTurn == "white" ? "black" : "white";
 
             if (isKingInCheck(board, opponent)) {
@@ -223,22 +223,44 @@
                 console.log("Draw");
             }
 
+            if (moves.piece instanceof Pawn || moves.capturedPiece != null)
+                halfMoveClock = 0;
+            else
+                halfMoveClock++;
+
+            if (halfMoveClock >= 100)
+            {
+                hasGameEnded = true;
+                console.log("Draw");    
+            }
+
             ChangeTurn();
         }
 
-        function handleTileClick(tile)
-        {
-            if (!hasGameEnded)
-            {
+        function handleTileClick(tile) {
+            if (!hasGameEnded) {
                 console.log(tile);
 
-                if (currentTile != null && !tile.isHighlighted)
-                {
+                if (currentTile != null && !tile.isHighlighted) {
                     CleanTilePreview();
                 }
-                else if (currentTile != null && tile.isHighlighted)
-                {
+
+                else if (currentTile != null && tile.isHighlighted) {
                     CleanTilePreview();
+
+                    const moves = {
+                        fromX: 0,
+                        fromY: 0,
+                        toX: 0,
+                        toY: 0,
+
+                        piece: null,
+                        capturedPiece: null,
+
+                        wasPromote: false,
+                        wasCastling: false,
+                        wasEnPassant: false,
+                    };
 
                     const isCastling = currentTile.piece instanceof King
                         && Math.abs(tile.x - currentTile.x) === 2;
@@ -246,17 +268,31 @@
                     const isEnPassant = tile.piece === null && currentTile.piece instanceof Pawn && Math.abs(tile.x - currentTile.x) === 1;
 
                     if (isEnPassant) {
-                        const capturedX = tile.x; 
+                        moves.wasEnPassant = true;
+
+                        enPassantTarget = null;
+
+                        const capturedX = tile.x;
                         board[currentTile.y][capturedX].piece = null;
                         board[currentTile.y][capturedX].occupied = false;
                         board[currentTile.y][capturedX].element.textContent = "";
                     }
 
 
-                    if (currentTile.piece instanceof Pawn && 2 == ((currentTile.y + 1) - (tile.y + 1)))
-                    {
-                         enPassantTarget = tile;
+                    if (currentTile.piece instanceof Pawn && 2 == ((currentTile.y + 1) - (tile.y + 1))) {
+                        enPassantTarget = tile;
                     }
+
+                    moves.fromX = currentTile.x;
+                    moves.fromY = currentTile.y;
+                    moves.toX = tile.x;
+                    moves.toY = tile.y;
+
+                    moves.piece = currentTile.piece;
+                    if (tile.piece != null)
+                        moves.capturedPiece = tile.piece;
+                    else
+                        moves.capturedPiece = null;
 
                     tile.piece = currentTile.piece;
                     tile.occupied = true;
@@ -266,8 +302,10 @@
                     currentTile.element.textContent = "";
 
 
-                    if (isCastling)
-                    {
+                    if (isCastling) {
+
+                        moves.wasCastling = true;
+
                         const isKingside = tile.x > currentTile.x;
                         const rookFromX = isKingside ? tile.x + 1 : tile.x - 2;
                         const rookToX = isKingside ? tile.x - 1 : tile.x + 1;
@@ -290,12 +328,17 @@
                             tile.piece = new chosenClass(color);
                             tile.piece.hasMoved = true;
                             tile.element.textContent = tile.piece.symbol;
-                            finishMove();
+
+                            moves.wasPromote = true;
+
+                            finishMove(moves);
                         });
-                        return; 
+
+                        return;
                     }
 
-                    finishMove();
+
+                    finishMove(moves);
 
                     return;
                 }
@@ -311,12 +354,10 @@
             }
         }
 
-        function CleanTilePreview()
-        {
+        function CleanTilePreview() {
             const moves = currentTile.piece.getMoves(board, currentTile.x, currentTile.y);
 
-            if (moves != null)
-            {
+            if (moves != null) {
                 moves.forEach(move => {
                     move.element.style.backgroundColor = "";
                     move.isHighlighted = false;
@@ -324,12 +365,9 @@
             }
         }
 
-        function ChangeTilePreview()
-        {
-            if (currentTile.piece != null)
-            {
-                if (currentTile.piece instanceof Pawn && enPassantTarget != null)
-                {
+        function ChangeTilePreview() {
+            if (currentTile.piece != null) {
+                if (currentTile.piece instanceof Pawn && enPassantTarget != null) {
                     canEnPassant = true;
                 }
 
@@ -338,14 +376,12 @@
                     move.isHighlighted = true;
                     move.element.style.backgroundColor = "green";
                 });
-                
+
             }
         }
 
-        function setupBoard()
-        {
-            for (let x = 0; x < 8; x++)
-            {
+        function setupBoard() {
+            for (let x = 0; x < 8; x++) {
                 board[0][x].piece = new backRow[x]("black");
                 board[1][x].piece = new Pawn("black");
 
@@ -354,12 +390,9 @@
             }
         }
 
-        function renderBoard()
-        {
-            for (let y = 0; y < 8; y++)
-            {
-                for (let x = 0; x < 8; x++)
-                {
+        function renderBoard() {
+            for (let y = 0; y < 8; y++) {
+                for (let x = 0; x < 8; x++) {
                     const tile = board[y][x];
 
                     if (tile.piece == null)
