@@ -14,6 +14,7 @@
 
         var hasGameEnded = false;
 
+        let enPassantTarget = null;
 
         const backRow = [
             Rook,
@@ -177,6 +178,54 @@
             return false;
         }
 
+        function isPromotionRank(piece, y) {
+            return (piece.color === "white" && y === 0) || (piece.color === "black" && y === 7);
+        }
+
+        function showPromotionDialog(color, callback) {
+            const overlay = document.createElement("div");
+            overlay.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);display:flex;justify-content:center;align-items:center;z-index:1000;";
+
+            const box = document.createElement("div");
+            box.style.cssText = "background:white;padding:20px;display:flex;gap:10px;border-radius:8px;";
+
+            const options = [
+                { cls: Queen, symbol: color === "white" ? "♕" : "♛" },
+                { cls: Rook, symbol: color === "white" ? "♖" : "♜" },
+                { cls: Bishop, symbol: color === "white" ? "♗" : "♝" },
+                { cls: Knight, symbol: color === "white" ? "♘" : "♞" }
+            ];
+
+            options.forEach(opt => {
+                const btn = document.createElement("button");
+                btn.textContent = opt.symbol;
+                btn.style.cssText = "font-size:40px;cursor:pointer;";
+                btn.addEventListener("click", () => {
+                    document.body.removeChild(overlay);
+                    callback(opt.cls);
+                });
+                box.appendChild(btn);
+            });
+
+            overlay.appendChild(box);
+            document.body.appendChild(overlay);
+        }
+
+        function finishMove() {
+            const opponent = currentTurn == "white" ? "black" : "white";
+
+            if (isKingInCheck(board, opponent)) {
+                if (!hasAnyLegalMove(opponent)) {
+                    EndGame();
+                }
+            } else if (!hasAnyLegalMove(opponent)) {
+                hasGameEnded = true;
+                console.log("Draw");
+            }
+
+            ChangeTurn();
+        }
+
         function handleTileClick(tile)
         {
             if (!hasGameEnded)
@@ -194,12 +243,28 @@
                     const isCastling = currentTile.piece instanceof King
                         && Math.abs(tile.x - currentTile.x) === 2;
 
+                    const isEnPassant = tile.piece === null && currentTile.piece instanceof Pawn && Math.abs(tile.x - currentTile.x) === 1;
+
+                    if (isEnPassant) {
+                        const capturedX = tile.x; 
+                        board[currentTile.y][capturedX].piece = null;
+                        board[currentTile.y][capturedX].occupied = false;
+                        board[currentTile.y][capturedX].element.textContent = "";
+                    }
+
+
+                    if (currentTile.piece instanceof Pawn && 2 == ((currentTile.y + 1) - (tile.y + 1)))
+                    {
+                         enPassantTarget = tile;
+                    }
+
                     tile.piece = currentTile.piece;
                     tile.occupied = true;
                     tile.piece.hasMoved = true;
                     tile.element.textContent = tile.piece.symbol;
                     board[currentTile.y][currentTile.x].piece = null;
                     currentTile.element.textContent = "";
+
 
                     if (isCastling)
                     {
@@ -219,41 +284,18 @@
 
                     currentTile = null;
 
-                    if (currentTurn == "white")
-                    {
-                        if (isKingInCheck(board, "black"))
-                        {
-                            if (!hasAnyLegalMove("black"))
-                            {
-                                EndGame();
-                            }
-                        }
-                        else if (!isKingInCheck(board, "black") && (!hasAnyLegalMove("black")))
-                        {
-                            hasGameEnded = true;
-
-                            console.log(" Draw ");
-                        }
-                    }
-                    else if (currentTurn == "black")
-                    {
-                        if (isKingInCheck(board, "white"))
-                        {
-                            if (!hasAnyLegalMove("white")) {
-                                EndGame();
-                            }
-                        }
-                        else if (!isKingInCheck(board, "white") && (!hasAnyLegalMove("white")))
-                        {
-                            hasGameEnded = true;
-
-                            console.log(" Draw ");
-                        }
+                    if (tile.piece instanceof Pawn && isPromotionRank(tile.piece, tile.y)) {
+                        const color = tile.piece.color;
+                        showPromotionDialog(color, (chosenClass) => {
+                            tile.piece = new chosenClass(color);
+                            tile.piece.hasMoved = true;
+                            tile.element.textContent = tile.piece.symbol;
+                            finishMove();
+                        });
+                        return; 
                     }
 
-                    
-
-                    ChangeTurn();
+                    finishMove();
 
                     return;
                 }
@@ -272,6 +314,7 @@
         function CleanTilePreview()
         {
             const moves = currentTile.piece.getMoves(board, currentTile.x, currentTile.y);
+
             if (moves != null)
             {
                 moves.forEach(move => {
@@ -285,11 +328,17 @@
         {
             if (currentTile.piece != null)
             {
+                if (currentTile.piece instanceof Pawn && enPassantTarget != null)
+                {
+                    canEnPassant = true;
+                }
+
                 const moves = getLegalMoves(currentTile.piece, currentTile);
                 moves.forEach(move => {
                     move.isHighlighted = true;
                     move.element.style.backgroundColor = "green";
                 });
+                
             }
         }
 

@@ -8,6 +8,8 @@
         }
     }
 
+    var canEnPassant = false;
+
     class Pawn extends Piece {
 
         constructor(color)
@@ -16,43 +18,50 @@
 
             this.symbol = color === "white" ? "♙" : "♟";
         }
-        getMoves(board, x, y)
-        {
+        EnPassant(board, x, y, direction) {
+            const moves = [];
+
+            if (isInside(board, x + 1, y) && board[y][x + 1].piece instanceof Pawn && board[y][x + 1].piece.color !== this.color) {
+                moves.push(board[y + direction][x + 1]);
+            }
+
+            if (isInside(board, x - 1, y) && board[y][x - 1].piece instanceof Pawn && board[y][x - 1].piece.color !== this.color) {
+                moves.push(board[y + direction][x - 1]);
+            }
+
+            return moves;
+        }
+        getMoves(board, x, y) {
             const moves = [];
             const direction = this.color === "white" ? -1 : 1;
 
-            if (isInside(board, x, y + direction))
-            {
-                if (!board[y + direction][x].piece)
-                {
-           
-                        moves.push(board[y + direction][x]);
-            
+            if (isInside(board, x, y + direction)) {
+                if (!board[y + direction][x].piece) {
+
+                    moves.push(board[y + direction][x]);
+
                 }
             }
-            if (!this.hasMoved && !board[y + direction][x].piece && !board[y + direction * 2][x].piece)
-            {
+            if (!this.hasMoved && !board[y + direction][x].piece && !board[y + direction * 2][x].piece) {
                 moves.push(board[y + direction * 2][x]);
             }
 
-            if (isInside(board, x, y + direction))
-            {
-                if (board[y + direction][x - 1]?.piece && board[y + direction][x - 1].piece.color !== this.color)
-                {
-            
+            if (isInside(board, x, y + direction)) {
+                if (board[y + direction][x - 1]?.piece && board[y + direction][x - 1].piece.color !== this.color) {
+
                     moves.push(board[y + direction][x - 1]);
                 }
             }
 
-            if (isInside(board, x, y + direction))
-            {
-                if (board[y + direction][x + 1]?.piece && board[y + direction][x + 1].piece.color !== this.color)
-                {
-            
+            if (isInside(board, x, y + direction)) {
+                if (board[y + direction][x + 1]?.piece && board[y + direction][x + 1].piece.color !== this.color) {
+
                     moves.push(board[y + direction][x + 1]);
                 }
             }
 
+            if(canEnPassant)
+                moves.push(...this.EnPassant(board, x, y, direction));  
 
             return moves;
         }
