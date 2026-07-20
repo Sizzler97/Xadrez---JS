@@ -150,7 +150,6 @@
             document.body.appendChild(overlay);
         }
 
-        // NEW: single move-execution path shared by player clicks AND the bot
         function executeMove(fromTile, toTile, promotionPieceClass = null) {
             const moveRecord = {
                 fromX: fromTile.x, fromY: fromTile.y,
@@ -214,13 +213,11 @@
                 const color = toTile.piece.color;
 
                 if (promotionPieceClass != null) {
-                    // bot already told us what to promote to (from UCI move, e.g. "e7e8q")
                     toTile.piece = new promotionPieceClass(color);
                     toTile.piece.hasMoved = true;
                     toTile.element.textContent = toTile.piece.symbol;
                     finishMove(moveRecord);
                 } else {
-                    // human player: ask
                     showPromotionDialog(color, (chosenClass) => {
                         toTile.piece = new chosenClass(color);
                         toTile.piece.hasMoved = true;
@@ -258,14 +255,13 @@
 
             ChangeTurn();
 
-            // NEW: hand off to the engine if it's now the bot's turn
             if (!hasGameEnded && currentTurn === botColor) {
                 triggerBotMove();
             }
         }
 
         function handleTileClick(tile) {
-            if (hasGameEnded || isBotThinking) return; // NEW: ignore clicks while bot is "thinking"
+            if (hasGameEnded || isBotThinking) return; 
 
             console.log(tile);
 
@@ -276,7 +272,7 @@
                 CleanTilePreview();
                 const fromTile = currentTile;
                 currentTile = null;
-                executeMove(fromTile, tile); // NEW: delegates to shared move logic
+                executeMove(fromTile, tile); 
                 return;
             }
 
@@ -301,7 +297,6 @@
 
         function ChangeTilePreview() {
             if (currentTile.piece != null) {
-                // NEW: explicit true/false instead of only ever setting true
                 canEnPassant = currentTile.piece instanceof Pawn && enPassantTarget != null;
 
                 const moves = getLegalMoves(currentTile.piece, currentTile);
@@ -330,21 +325,20 @@
             }
         }
 
-        // ---- Stockfish integration ----
 
-        function toAlgebraic(x, y) { // NEW
+        function toAlgebraic(x, y) {
             const file = String.fromCharCode("a".charCodeAt(0) + x);
             const rank = 8 - y;
             return `${file}${rank}`;
         }
 
-        function algebraicToCoords(square) { // NEW
+        function algebraicToCoords(square) {
             const x = square.charCodeAt(0) - "a".charCodeAt(0);
             const y = 8 - parseInt(square[1], 10);
             return { x, y };
         }
 
-        function getCastlingRights(board) { // NEW
+        function getCastlingRights(board) {
             let rights = "";
             if (!board[7][4].piece?.hasMoved && !board[7][7].piece?.hasMoved) rights += "K";
             if (!board[7][4].piece?.hasMoved && !board[7][0].piece?.hasMoved) rights += "Q";
@@ -374,12 +368,12 @@
             }
 
             fen += ` ${currentTurn === "white" ? "w" : "b"}`;
-            fen += ` ${getCastlingRights(board)}`;                          // FIXED: was hardcoded "KQkq"
-            fen += enPassantTarget != null                                   // FIXED: was hardcoded "-"
+            fen += ` ${getCastlingRights(board)}`;                         
+            fen += enPassantTarget != null                                   
                 ? ` ${toAlgebraic(enPassantTarget.x, enPassantTarget.y)}`
                 : " -";
-            fen += ` ${halfMoveClock}`;                                      // FIXED: was hardcoded "0"
-            fen += ` ${Math.floor(moveHistory.length / 2) + 1}`;             // FIXED: was hardcoded "1"
+            fen += ` ${halfMoveClock}`;                                      
+            fen += ` ${Math.floor(moveHistory.length / 2) + 1}`;             
 
             return fen;
         }
@@ -398,8 +392,8 @@
             stockfish.addEventListener("message", listener);
         }
 
-        function applyUCIMove(uciMove) { // NEW
-            if (uciMove == null || uciMove === "(none)") return; // no legal moves (checkmate/stalemate)
+        function applyUCIMove(uciMove) { 
+            if (uciMove == null || uciMove === "(none)") return; 
 
             const fromSquare = uciMove.slice(0, 2);
             const toSquare = uciMove.slice(2, 4);
@@ -417,7 +411,7 @@
             executeMove(fromTile, toTile, promotionClass);
         }
 
-        function triggerBotMove() { // NEW
+        function triggerBotMove() {
             isBotThinking = true;
             const fen = boardToFEN(board, currentTurn);
             getBotMove(fen, (uciMove) => {
