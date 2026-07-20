@@ -18,7 +18,7 @@
         const stockfish = new Worker("stockfish-18-lite-single.js");
 
         stockfish.addEventListener("message", (e) => {
-            console.log(e.data);
+            //console.log(e.data);
         });
 
         stockfish.postMessage("uci");
@@ -412,9 +412,12 @@
         }
 
         function triggerBotMove() {
+            console.log("triggerBotMove called, currentTurn:", currentTurn); 
             isBotThinking = true;
             const fen = boardToFEN(board, currentTurn);
+            console.log("Sending FEN:", fen);
             getBotMove(fen, (uciMove) => {
+                console.log("Received bestmove:", uciMove); 
                 isBotThinking = false;
                 applyUCIMove(uciMove);
             });
