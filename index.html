@@ -340,10 +340,18 @@
 
         function getCastlingRights(board) {
             let rights = "";
-            if (!board[7][4].piece?.hasMoved && !board[7][7].piece?.hasMoved) rights += "K";
-            if (!board[7][4].piece?.hasMoved && !board[7][0].piece?.hasMoved) rights += "Q";
-            if (!board[0][4].piece?.hasMoved && !board[0][7].piece?.hasMoved) rights += "k";
-            if (!board[0][4].piece?.hasMoved && !board[0][0].piece?.hasMoved) rights += "q";
+            const wk = board[7][4].piece;
+            const wrH = board[7][7].piece;
+            const wrA = board[7][0].piece;
+            const bk = board[0][4].piece;
+            const brH = board[0][7].piece;
+            const brA = board[0][0].piece;
+
+            if (wk instanceof King && !wk.hasMoved && wrH instanceof Rook && !wrH.hasMoved) rights += "K";
+            if (wk instanceof King && !wk.hasMoved && wrA instanceof Rook && !wrA.hasMoved) rights += "Q";
+            if (bk instanceof King && !bk.hasMoved && brH instanceof Rook && !brH.hasMoved) rights += "k";
+            if (bk instanceof King && !bk.hasMoved && brA instanceof Rook && !brA.hasMoved) rights += "q";
+
             return rights.length ? rights : "-";
         }
 
