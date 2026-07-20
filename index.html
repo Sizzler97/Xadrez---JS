@@ -10,79 +10,57 @@
 
     <script src="gameObjects.js"></script>
     <script src="moves.js"></script>
+    
     <script>
+        const wasmSupported = typeof WebAssembly === "object"
+            && WebAssembly.validate(Uint8Array.of(0x0, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00));
+
+        const stockfish = new Worker(wasmSupported ? "stockfish-18-lite.wasm.js" : "stockfish-18-lite.js");
+
+        stockfish.addEventListener("message", (e) => {
+            console.log(e.data);
+        });
+
+        stockfish.postMessage("uci");
+        stockfish.postMessage("isready");
+
         var currentTurn = "white";
-
         var hasGameEnded = false;
-
         let enPassantTarget = null;
-
+        let canEnPassant = false; 
         const moveHistory = [];
-
-        const backRow = [
-            Rook,
-            Knight,
-            Bishop,
-            Queen,
-            King,
-            Bishop,
-            Knight,
-            Rook
-        ];
-
-        let checkResolvingMoves = null;
-
-        var currentTile = null;
-
         let halfMoveClock = 0;
 
-        const board = [];
+        const botColor = "black";       
+        let isBotThinking = false;      
 
+        const backRow = [Rook, Knight, Bishop, Queen, King, Bishop, Knight, Rook];
+
+        let checkResolvingMoves = null;
+        var currentTile = null;
+
+        const board = [];
         const table = document.querySelector("table");
 
         for (let y = 0; y < 8; y++) {
             const row = document.createElement("tr");
             board[y] = [];
-
             for (let x = 0; x < 8; x++) {
                 const cell = document.createElement("td");
-
-                const tile = {
-                    x,
-                    y,
-                    occupied: false,
-                    piece: null,
-                    isHighlighted: false,
-                    element: cell
-                };
-
+                const tile = { x, y, occupied: false, piece: null, isHighlighted: false, element: cell };
                 board[y][x] = tile;
-
-                cell.addEventListener("click", () => {
-                    handleTileClick(tile);
-                });
-
+                cell.addEventListener("click", () => { handleTileClick(tile); });
                 row.appendChild(cell);
             }
-
             table.appendChild(row);
         }
 
         function ChangeTurn() {
-
-            if (currentTurn == "white") {
-                currentTurn = "black";
-            }
-            else if (currentTurn == "black") {
-                currentTurn = "white";
-            }
-
+            currentTurn = currentTurn == "white" ? "black" : "white";
         }
-
 
         function EndGame() {
             hasGameEnded = true;
-
             console.log(currentTurn + " won the game");
         }
 
@@ -103,57 +81,22 @@
                     const piece = board[y][x].piece;
                     if (piece != null && piece.color !== color) {
                         const moves = piece.getMoves(board, x, y);
-                        if (moves.includes(kingTile)) {
-                            return true;
-                        }
+                        if (moves.includes(kingTile)) return true;
                     }
                 }
             }
-            checkResolvingMoves = null;
             return false;
-        }
-
-        function computeCheckResolvingMoves(board, color) {
-            const resolving = [];
-            for (let y = 0; y < 8; y++) {
-                for (let x = 0; x < 8; x++) {
-                    const piece = board[y][x].piece;
-                    if (piece == null || piece.color !== color) continue;
-
-                    const fromTile = board[y][x];
-                    const moves = piece.getMoves(board, x, y);
-
-                    for (const toTile of moves) {
-                        const capturedPiece = toTile.piece;
-
-                        toTile.piece = piece;
-                        fromTile.piece = null;
-
-                        const stillInCheck = isKingInCheck(board, color);
-
-                        fromTile.piece = piece; // undo
-                        toTile.piece = capturedPiece;
-
-                        if (!stillInCheck) {
-                            resolving.push({ from: fromTile, to: toTile });
-                        }
-                    }
-                }
-            }
-            return resolving;
         }
 
         function wouldBeInCheck(piece, fromTile, toTile) {
             const capturedPiece = toTile.piece;
-
             toTile.piece = piece;
             fromTile.piece = null;
 
             const inCheck = isKingInCheck(board, piece.color);
 
-            fromTile.piece = piece; // undo
+            fromTile.piece = piece;
             toTile.piece = capturedPiece;
-
             return inCheck;
         }
 
@@ -167,9 +110,7 @@
                 for (let x = 0; x < 8; x++) {
                     const piece = board[y][x].piece;
                     if (piece != null && piece.color === color) {
-                        if (getLegalMoves(piece, board[y][x]).length > 0) {
-                            return true;
-                        }
+                        if (getLegalMoves(piece, board[y][x]).length > 0) return true;
                     }
                 }
             }
@@ -209,154 +150,147 @@
             document.body.appendChild(overlay);
         }
 
-        function finishMove(moves) {
-            moveHistory.push(moves);
+        // NEW: single move-execution path shared by player clicks AND the bot
+        function executeMove(fromTile, toTile, promotionPieceClass = null) {
+            const moveRecord = {
+                fromX: fromTile.x, fromY: fromTile.y,
+                toX: toTile.x, toY: toTile.y,
+                piece: fromTile.piece,
+                capturedPiece: toTile.piece,
+                wasPromote: false,
+                wasCastling: false,
+                wasEnPassant: false,
+            };
+
+            const isCastling = fromTile.piece instanceof King
+                && Math.abs(toTile.x - fromTile.x) === 2;
+
+            const isEnPassant = toTile.piece === null
+                && fromTile.piece instanceof Pawn
+                && Math.abs(toTile.x - fromTile.x) === 1
+                && toTile.y !== fromTile.y;
+
+            if (isEnPassant) {
+                moveRecord.wasEnPassant = true;
+                moveRecord.capturedPiece = board[fromTile.y][toTile.x].piece;
+
+                board[fromTile.y][toTile.x].piece = null;
+                board[fromTile.y][toTile.x].occupied = false;
+                board[fromTile.y][toTile.x].element.textContent = "";
+            }
+
+            enPassantTarget = null;
+            canEnPassant = false;
+
+            if (fromTile.piece instanceof Pawn && Math.abs(toTile.y - fromTile.y) === 2) {
+                enPassantTarget = toTile;
+            }
+
+            toTile.piece = fromTile.piece;
+            toTile.occupied = true;
+            toTile.piece.hasMoved = true;
+            toTile.element.textContent = toTile.piece.symbol;
+            fromTile.piece = null;
+            fromTile.element.textContent = "";
+
+            if (isCastling) {
+                moveRecord.wasCastling = true;
+                const isKingside = toTile.x > fromTile.x;
+                const rookFromX = isKingside ? toTile.x + 1 : toTile.x - 2;
+                const rookToX = isKingside ? toTile.x - 1 : toTile.x + 1;
+
+                const rookFromTile = board[toTile.y][rookFromX];
+                const rookToTile = board[toTile.y][rookToX];
+
+                rookToTile.piece = rookFromTile.piece;
+                rookToTile.piece.hasMoved = true;
+                rookToTile.element.textContent = rookToTile.piece.symbol;
+                rookFromTile.piece = null;
+                rookFromTile.element.textContent = "";
+            }
+
+            if (toTile.piece instanceof Pawn && isPromotionRank(toTile.piece, toTile.y)) {
+                moveRecord.wasPromote = true;
+                const color = toTile.piece.color;
+
+                if (promotionPieceClass != null) {
+                    // bot already told us what to promote to (from UCI move, e.g. "e7e8q")
+                    toTile.piece = new promotionPieceClass(color);
+                    toTile.piece.hasMoved = true;
+                    toTile.element.textContent = toTile.piece.symbol;
+                    finishMove(moveRecord);
+                } else {
+                    // human player: ask
+                    showPromotionDialog(color, (chosenClass) => {
+                        toTile.piece = new chosenClass(color);
+                        toTile.piece.hasMoved = true;
+                        toTile.element.textContent = toTile.piece.symbol;
+                        finishMove(moveRecord);
+                    });
+                }
+                return;
+            }
+
+            finishMove(moveRecord);
+        }
+
+        function finishMove(moveRecord) {
+            moveHistory.push(moveRecord);
 
             const opponent = currentTurn == "white" ? "black" : "white";
 
             if (isKingInCheck(board, opponent)) {
-                if (!hasAnyLegalMove(opponent)) {
-                    EndGame();
-                }
+                if (!hasAnyLegalMove(opponent)) EndGame();
             } else if (!hasAnyLegalMove(opponent)) {
                 hasGameEnded = true;
                 console.log("Draw");
             }
 
-            if (moves.piece instanceof Pawn || moves.capturedPiece != null)
+            if (moveRecord.piece instanceof Pawn || moveRecord.capturedPiece != null)
                 halfMoveClock = 0;
             else
                 halfMoveClock++;
 
-            if (halfMoveClock >= 100)
-            {
+            if (halfMoveClock >= 100) {
                 hasGameEnded = true;
-                console.log("Draw");    
+                console.log("Draw");
             }
 
             ChangeTurn();
+
+            // NEW: hand off to the engine if it's now the bot's turn
+            if (!hasGameEnded && currentTurn === botColor) {
+                triggerBotMove();
+            }
         }
 
         function handleTileClick(tile) {
-            if (!hasGameEnded) {
-                console.log(tile);
+            if (hasGameEnded || isBotThinking) return; // NEW: ignore clicks while bot is "thinking"
 
-                if (currentTile != null && !tile.isHighlighted) {
-                    CleanTilePreview();
-                }
+            console.log(tile);
 
-                else if (currentTile != null && tile.isHighlighted) {
-                    CleanTilePreview();
+            if (currentTile != null && !tile.isHighlighted) {
+                CleanTilePreview();
+            }
+            else if (currentTile != null && tile.isHighlighted) {
+                CleanTilePreview();
+                const fromTile = currentTile;
+                currentTile = null;
+                executeMove(fromTile, tile); // NEW: delegates to shared move logic
+                return;
+            }
 
-                    const moves = {
-                        fromX: 0,
-                        fromY: 0,
-                        toX: 0,
-                        toY: 0,
-
-                        piece: null,
-                        capturedPiece: null,
-
-                        wasPromote: false,
-                        wasCastling: false,
-                        wasEnPassant: false,
-                    };
-
-                    const isCastling = currentTile.piece instanceof King
-                        && Math.abs(tile.x - currentTile.x) === 2;
-
-                    const isEnPassant = tile.piece === null && currentTile.piece instanceof Pawn && Math.abs(tile.x - currentTile.x) === 1;
-
-                    if (isEnPassant) {
-                        moves.wasEnPassant = true;
-
-                        enPassantTarget = null;
-
-                        const capturedX = tile.x;
-                        board[currentTile.y][capturedX].piece = null;
-                        board[currentTile.y][capturedX].occupied = false;
-                        board[currentTile.y][capturedX].element.textContent = "";
-                    }
-
-
-                    if (currentTile.piece instanceof Pawn && 2 == ((currentTile.y + 1) - (tile.y + 1))) {
-                        enPassantTarget = tile;
-                    }
-
-                    moves.fromX = currentTile.x;
-                    moves.fromY = currentTile.y;
-                    moves.toX = tile.x;
-                    moves.toY = tile.y;
-
-                    moves.piece = currentTile.piece;
-                    if (tile.piece != null)
-                        moves.capturedPiece = tile.piece;
-                    else
-                        moves.capturedPiece = null;
-
-                    tile.piece = currentTile.piece;
-                    tile.occupied = true;
-                    tile.piece.hasMoved = true;
-                    tile.element.textContent = tile.piece.symbol;
-                    board[currentTile.y][currentTile.x].piece = null;
-                    currentTile.element.textContent = "";
-
-
-                    if (isCastling) {
-
-                        moves.wasCastling = true;
-
-                        const isKingside = tile.x > currentTile.x;
-                        const rookFromX = isKingside ? tile.x + 1 : tile.x - 2;
-                        const rookToX = isKingside ? tile.x - 1 : tile.x + 1;
-
-                        const rookFromTile = board[tile.y][rookFromX];
-                        const rookToTile = board[tile.y][rookToX];
-
-                        rookToTile.piece = rookFromTile.piece;
-                        rookToTile.piece.hasMoved = true;
-                        rookToTile.element.textContent = rookToTile.piece.symbol;
-                        rookFromTile.piece = null;
-                        rookFromTile.element.textContent = "";
-                    }
-
-                    currentTile = null;
-
-                    if (tile.piece instanceof Pawn && isPromotionRank(tile.piece, tile.y)) {
-                        const color = tile.piece.color;
-                        showPromotionDialog(color, (chosenClass) => {
-                            tile.piece = new chosenClass(color);
-                            tile.piece.hasMoved = true;
-                            tile.element.textContent = tile.piece.symbol;
-
-                            moves.wasPromote = true;
-
-                            finishMove(moves);
-                        });
-
-                        return;
-                    }
-
-
-                    finishMove(moves);
-
-                    return;
-                }
-
-                if (tile.piece != null && tile.piece.color == currentTurn) {
-                    currentTile = tile;
-
-                    ChangeTilePreview();
-                }
-                else if (tile.piece == null) {
-                    currentTile = null;
-                }
+            if (tile.piece != null && tile.piece.color == currentTurn) {
+                currentTile = tile;
+                ChangeTilePreview();
+            }
+            else if (tile.piece == null) {
+                currentTile = null;
             }
         }
 
         function CleanTilePreview() {
             const moves = currentTile.piece.getMoves(board, currentTile.x, currentTile.y);
-
             if (moves != null) {
                 moves.forEach(move => {
                     move.element.style.backgroundColor = "";
@@ -367,16 +301,14 @@
 
         function ChangeTilePreview() {
             if (currentTile.piece != null) {
-                if (currentTile.piece instanceof Pawn && enPassantTarget != null) {
-                    canEnPassant = true;
-                }
+                // NEW: explicit true/false instead of only ever setting true
+                canEnPassant = currentTile.piece instanceof Pawn && enPassantTarget != null;
 
                 const moves = getLegalMoves(currentTile.piece, currentTile);
                 moves.forEach(move => {
                     move.isHighlighted = true;
                     move.element.style.backgroundColor = "green";
                 });
-
             }
         }
 
@@ -384,7 +316,6 @@
             for (let x = 0; x < 8; x++) {
                 board[0][x].piece = new backRow[x]("black");
                 board[1][x].piece = new Pawn("black");
-
                 board[6][x].piece = new Pawn("white");
                 board[7][x].piece = new backRow[x]("white");
             }
@@ -394,13 +325,105 @@
             for (let y = 0; y < 8; y++) {
                 for (let x = 0; x < 8; x++) {
                     const tile = board[y][x];
-
-                    if (tile.piece == null)
-                        tile.element.textContent = "";
-                    else
-                        tile.element.textContent = tile.piece.symbol;
+                    tile.element.textContent = tile.piece == null ? "" : tile.piece.symbol;
                 }
             }
+        }
+
+        // ---- Stockfish integration ----
+
+        function toAlgebraic(x, y) { // NEW
+            const file = String.fromCharCode("a".charCodeAt(0) + x);
+            const rank = 8 - y;
+            return `${file}${rank}`;
+        }
+
+        function algebraicToCoords(square) { // NEW
+            const x = square.charCodeAt(0) - "a".charCodeAt(0);
+            const y = 8 - parseInt(square[1], 10);
+            return { x, y };
+        }
+
+        function getCastlingRights(board) { // NEW
+            let rights = "";
+            if (!board[7][4].piece?.hasMoved && !board[7][7].piece?.hasMoved) rights += "K";
+            if (!board[7][4].piece?.hasMoved && !board[7][0].piece?.hasMoved) rights += "Q";
+            if (!board[0][4].piece?.hasMoved && !board[0][7].piece?.hasMoved) rights += "k";
+            if (!board[0][4].piece?.hasMoved && !board[0][0].piece?.hasMoved) rights += "q";
+            return rights.length ? rights : "-";
+        }
+
+        function boardToFEN(board, currentTurn) {
+            const pieceChars = { Pawn: "p", Knight: "n", Bishop: "b", Rook: "r", Queen: "q", King: "k" };
+
+            let fen = "";
+            for (let y = 0; y < 8; y++) {
+                let emptyCount = 0;
+                for (let x = 0; x < 8; x++) {
+                    const piece = board[y][x].piece;
+                    if (piece == null) {
+                        emptyCount++;
+                    } else {
+                        if (emptyCount > 0) { fen += emptyCount; emptyCount = 0; }
+                        const char = pieceChars[piece.constructor.name];
+                        fen += piece.color === "white" ? char.toUpperCase() : char;
+                    }
+                }
+                if (emptyCount > 0) fen += emptyCount;
+                if (y < 7) fen += "/";
+            }
+
+            fen += ` ${currentTurn === "white" ? "w" : "b"}`;
+            fen += ` ${getCastlingRights(board)}`;                          // FIXED: was hardcoded "KQkq"
+            fen += enPassantTarget != null                                   // FIXED: was hardcoded "-"
+                ? ` ${toAlgebraic(enPassantTarget.x, enPassantTarget.y)}`
+                : " -";
+            fen += ` ${halfMoveClock}`;                                      // FIXED: was hardcoded "0"
+            fen += ` ${Math.floor(moveHistory.length / 2) + 1}`;             // FIXED: was hardcoded "1"
+
+            return fen;
+        }
+
+        function getBotMove(fen, callback) {
+            stockfish.postMessage(`position fen ${fen}`);
+            stockfish.postMessage("go depth 15");
+
+            const listener = (e) => {
+                if (typeof e.data === "string" && e.data.startsWith("bestmove")) {
+                    const move = e.data.split(" ")[1];
+                    stockfish.removeEventListener("message", listener);
+                    callback(move);
+                }
+            };
+            stockfish.addEventListener("message", listener);
+        }
+
+        function applyUCIMove(uciMove) { // NEW
+            if (uciMove == null || uciMove === "(none)") return; // no legal moves (checkmate/stalemate)
+
+            const fromSquare = uciMove.slice(0, 2);
+            const toSquare = uciMove.slice(2, 4);
+            const promotionChar = uciMove.length > 4 ? uciMove[4] : null;
+
+            const from = algebraicToCoords(fromSquare);
+            const to = algebraicToCoords(toSquare);
+
+            const fromTile = board[from.y][from.x];
+            const toTile = board[to.y][to.x];
+
+            const promotionMap = { q: Queen, r: Rook, b: Bishop, n: Knight };
+            const promotionClass = promotionChar ? promotionMap[promotionChar] : null;
+
+            executeMove(fromTile, toTile, promotionClass);
+        }
+
+        function triggerBotMove() { // NEW
+            isBotThinking = true;
+            const fen = boardToFEN(board, currentTurn);
+            getBotMove(fen, (uciMove) => {
+                isBotThinking = false;
+                applyUCIMove(uciMove);
+            });
         }
 
         setupBoard();
