@@ -2,6 +2,7 @@
 <html lang="pt-pt">
 <head>
     <link rel="stylesheet" type="text/css" href="main.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Playfair+Display:wght@600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <meta charset="UTF-8" />
 </head>
 <body>
@@ -23,7 +24,7 @@
 
         stockfish.postMessage("uci");
         stockfish.postMessage("isready");
-
+        
         var currentTurn = "white";
         var hasGameEnded = false;
         let enPassantTarget = null;
@@ -188,7 +189,7 @@
             toTile.piece = fromTile.piece;
             toTile.occupied = true;
             toTile.piece.hasMoved = true;
-            toTile.element.textContent = toTile.piece.symbol;
+            renderPiece(toTile);
             fromTile.piece = null;
             fromTile.element.textContent = "";
 
@@ -203,7 +204,7 @@
 
                 rookToTile.piece = rookFromTile.piece;
                 rookToTile.piece.hasMoved = true;
-                rookToTile.element.textContent = rookToTile.piece.symbol;
+                renderPiece(rookToTile);
                 rookFromTile.piece = null;
                 rookFromTile.element.textContent = "";
             }
@@ -215,13 +216,13 @@
                 if (promotionPieceClass != null) {
                     toTile.piece = new promotionPieceClass(color);
                     toTile.piece.hasMoved = true;
-                    toTile.element.textContent = toTile.piece.symbol;
+                    renderPiece(toTile);
                     finishMove(moveRecord);
                 } else {
                     showPromotionDialog(color, (chosenClass) => {
                         toTile.piece = new chosenClass(color);
                         toTile.piece.hasMoved = true;
-                        toTile.element.textContent = toTile.piece.symbol;
+                        renderPiece(toTile);
                         finishMove(moveRecord);
                     });
                 }
@@ -320,7 +321,13 @@
             for (let y = 0; y < 8; y++) {
                 for (let x = 0; x < 8; x++) {
                     const tile = board[y][x];
-                    tile.element.textContent = tile.piece == null ? "" : tile.piece.symbol;
+
+                    if (tile.piece != null) {
+                        renderPiece(tile);
+                    }
+                    else {
+                        tile.element.textContent = "";
+                    }
                 }
             }
         }
@@ -429,6 +436,15 @@
                 isBotThinking = false;
                 applyUCIMove(uciMove);
             });
+        }
+
+        function renderPiece(tile) {
+            if (tile.piece == null) {
+                tile.element.innerHTML = "";
+                return;
+            }   
+            const filename = `${tile.piece.color}-${tile.piece.constructor.name.toLowerCase()}.png`;
+            tile.element.innerHTML = `<img src="pieces/${filename}" alt="${tile.piece.color} ${tile.piece.constructor.name}">`;
         }
 
         setupBoard();
