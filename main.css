@@ -108,6 +108,7 @@
 
     .history .move-list {
         flex: 1;
+        overflow-y: hidden;
         height: 100%;
         font-family: 'JetBrains Mono', monospace;
         font-size: 14px;
