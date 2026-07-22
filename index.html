@@ -246,6 +246,7 @@
 
         function finishMove(moveRecord) {
             moveHistory.push(moveRecord);
+            addMoveToHistoryTable(moveRecord);
 
             const opponent = currentTurn == "white" ? "black" : "white";
 
