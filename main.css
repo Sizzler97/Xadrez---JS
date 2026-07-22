@@ -108,12 +108,13 @@
 
     .history .move-list {
         flex: 1;
-        overflow-y: hidden;
+        overflow-y: auto;
         height: 100%;
         font-family: 'JetBrains Mono', monospace;
         font-size: 14px;
         color: var(--text-dim);
         line-height: 1.8;
+        scrollbar-width: none;
     }
 
     .move-table {
@@ -140,18 +141,5 @@
     }
 
     .history .move-list::-webkit-scrollbar {
-        width: 6px;
-    }
-
-    .history .move-list::-webkit-scrollbar-track {
-        background: transparent;
-    }
-
-    .history .move-list::-webkit-scrollbar-thumb {
-        background: rgba(255,255,255,.15);
-        border-radius: 999px;
-    }
-
-    .history .move-list::-webkit-scrollbar-thumb:hover {
-        background: rgba(255,255,255,.3);
+        display: none;
     }
