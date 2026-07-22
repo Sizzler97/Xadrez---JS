@@ -106,15 +106,15 @@
         letter-spacing: 0.02em;
     }
 
-        .history .move-list {
-            overflow: hidden;
-            flex: 1;
-            overflow-y: auto;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 14px;
-            color: var(--text-dim);
-            line-height: 1.8;
-        }
+    .history .move-list {
+        overflow-x: hidden;
+        flex: 1;
+        overflow-y: auto;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 14px;
+        color: var(--text-dim);
+        line-height: 1.8;
+    }
 
     .move-table {
         border-collapse: collapse;
