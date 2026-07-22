@@ -6,8 +6,20 @@
     <meta charset="UTF-8" />
 </head>
 <body>
-    <table id="table">
-    </table>
+    <table id="table" class="chess-board"></table>
+    <div class="history">
+        <h2>Moves</h2>
+
+        <div class="move-list">
+            <table class="move-table">
+                <thead>
+                    ...
+                </thead>
+
+                <tbody id="moveTableBody"></tbody>
+            </table>
+        </div>
+    </div>
 
     <script src="gameObjects.js"></script>
     <script src="moves.js"></script>
@@ -445,6 +457,44 @@
             }   
             const filename = `${tile.piece.color}-${tile.piece.constructor.name.toLowerCase()}.png`;
             tile.element.innerHTML = `<img src="pieces/${filename}" alt="${tile.piece.color} ${tile.piece.constructor.name}">`;
+        }
+
+        function moveToNotation(moveRecord) {
+            if (moveRecord.wasCastling) {
+                return moveRecord.toX > moveRecord.fromX ? "O-O" : "O-O-O";
+            }
+
+            const pieceLetters = { King: "K", Queen: "Q", Rook: "R", Bishop: "B", Knight: "N" };
+            const pieceLetter = pieceLetters[moveRecord.piece.constructor.name] || "";
+
+            const toSquare = toAlgebraic(moveRecord.toX, moveRecord.toY);
+            const isCapture = moveRecord.capturedPiece != null || moveRecord.wasEnPassant;
+
+            let notation = pieceLetter;
+            if (isCapture) {
+                if (pieceLetter === "") notation += String.fromCharCode("a".charCodeAt(0) + moveRecord.fromX);
+                notation += "x";
+            }
+            notation += toSquare;
+
+            if (moveRecord.wasPromote) notation += "=Q"; 
+
+            return notation;
+        }
+
+        function addMoveToHistoryTable(moveRecord) {
+            const tbody = document.getElementById("moveTableBody");
+            const notation = moveToNotation(moveRecord);
+
+            if (moveRecord.piece.color === "white") {
+                const row = document.createElement("tr");
+                const moveNumber = Math.floor(moveHistory.length / 2) + 1;
+                row.innerHTML = `<td>${moveNumber}.</td><td>${notation}</td><td></td>`;
+                tbody.appendChild(row);
+            } else {
+                const lastRow = tbody.lastElementChild;
+                lastRow.children[2].textContent = notation;
+            }
         }
 
         setupBoard();
